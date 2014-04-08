@@ -1,11 +1,13 @@
 package me.schiz.ringpool;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class BinaryRingPool<T> implements RingPool {
-	private int capacity;
-	private Holder[] objects;
-	private ThreadLocal<Integer> localPointer;
+	protected int capacity;
+	protected Holder[] objects;
+	protected ThreadLocal<Integer> localPointer;
 
 	public BinaryRingPool(int capacity) {
 		this.capacity = capacity;
@@ -57,7 +59,7 @@ public class BinaryRingPool<T> implements RingPool {
 
 	@Override
 	public boolean release(int ptr) {
-		return objects[ptr].state.weakCompareAndSet(Holder.BUSY, Holder.FREE);
+		return objects[ptr].state.compareAndSet(Holder.BUSY, Holder.FREE);
 	}
 
 	@Override
@@ -69,26 +71,22 @@ public class BinaryRingPool<T> implements RingPool {
 		objects[ptr].value = null;
 	}
 
-	public Stats getStats() {
-		Stats stats = new Stats();
+	public Map<String, Object> getStats() {
+		HashMap<String, Object> stats = new HashMap<String, Object>();
+		int free = 0, null_objects = 0;
 		for(int i = 0;i<capacity;i++) {
-			if(objects[i].state.get() == Holder.FREE)	stats.free_objects++;
-			if(objects[i].value == null)	stats.null_objects++;
+			if(objects[i].state.get() == Holder.FREE)	free++;
+			if(objects[i].value == null)	null_objects++;
 		}
-		stats.busy_objects = capacity - stats.free_objects;
-		stats.notnull_objects = capacity - stats.null_objects;
+		stats.put("free", free);
+		stats.put("busy", capacity - free);
+		stats.put("null_objects", null_objects);
+		stats.put("notnull_objects", capacity - null_objects);
 		return stats;
 	}
 
 	public boolean isBusy(int ptr) {
 		return objects[ptr].state.get();
-	}
-
-	public class Stats{
-		public int null_objects;
-		public int notnull_objects;
-		public int free_objects;
-		public int busy_objects;
 	}
 
 	private class Holder<T> {

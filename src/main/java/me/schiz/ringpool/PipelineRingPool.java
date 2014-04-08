@@ -1,5 +1,7 @@
 package me.schiz.ringpool;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class PipelineRingPool<T> implements RingPool{
@@ -70,32 +72,27 @@ public class PipelineRingPool<T> implements RingPool{
 		return (T)objects[ptr].value;
 	}
 
-	public Stats getStats() {
-		Stats stats = new Stats();
+	public Map<String, Object> getStats() {
+		HashMap<String, Object> stats = new HashMap<String, Object>();
 		int level;
+		long free_objects = 0, busy_pipes = 0, null_objects = 0;
 		for(int i = 0;i<capacity;i++) {
 			level = objects[i].pipeline_level.get();
-			if(level == 0)	stats.free_objects++;
-			if(level > 0)	stats.busy_pipes += Math.min(level, pipeline);
-			if(objects[i].value == null)	stats.null_objects++;
+			if(level == 0)	free_objects++;
+			if(level > 0)	busy_pipes += Math.min(level, pipeline);
+			if(objects[i].value == null)	null_objects++;
 		}
-		stats.busy_objects = capacity - stats.free_objects;
-		stats.free_pipes = pipeline*capacity - stats.busy_pipes;
-		stats.notnull_objects = capacity - stats.null_objects;
+		stats.put("free_objects", free_objects);
+		stats.put("busy_objects", capacity - free_objects);
+		stats.put("free_pipes", capacity*pipeline - busy_pipes);
+		stats.put("busy_pipes", busy_pipes);
+		stats.put("null_objects", null_objects);
+		stats.put("notnull_objects", capacity - null_objects);
 		return stats;
 	}
 
 	public int busyLevel(int ptr) {
 		return Math.min(objects[ptr].pipeline_level.get(), pipeline);
-	}
-
-	public class Stats{
-		public int null_objects;
-		public int notnull_objects;
-		public int free_objects;
-		public int busy_objects;
-		public int free_pipes;
-		public int busy_pipes;
 	}
 
 	private class Holder<T> {
