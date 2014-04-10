@@ -19,7 +19,7 @@ public class BinaryRingPool<T> implements RingPool {
 		}
 	}
 
-	private int getLocalPointer() {
+	protected int getLocalPointer() {
 		Integer ptr;
 		if((ptr = localPointer.get()) == null) {
 			ptr = (int)(Thread.currentThread().hashCode() % capacity);
@@ -67,8 +67,15 @@ public class BinaryRingPool<T> implements RingPool {
 		return (T)objects[ptr].value;
 	}
 
-	public void destroy(int ptr) {
+	@Override
+	public boolean delete(int ptr, boolean isAcquired) {
+		if(!isAcquired) {
+			isAcquired = objects[ptr].state.compareAndSet(Holder.FREE, Holder.BUSY);
+			if(!isAcquired)	return false;
+		}
 		objects[ptr].value = null;
+		objects[ptr].state.set(Holder.FREE);
+		return true;
 	}
 
 	public Map<String, Object> getStats() {

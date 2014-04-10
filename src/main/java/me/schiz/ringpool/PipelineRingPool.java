@@ -72,6 +72,11 @@ public class PipelineRingPool<T> implements RingPool{
 		return (T)objects[ptr].value;
 	}
 
+	@Override
+	public boolean delete(int ptr, boolean isAcquired) {
+		return false;
+	}
+
 	public Map<String, Object> getStats() {
 		HashMap<String, Object> stats = new HashMap<String, Object>();
 		int level;
