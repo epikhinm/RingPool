@@ -11,15 +11,11 @@ public class BlockingBinaryRingPool<T> extends BinaryRingPool<T> {
 	protected Object pd_monitor;	//monitor for put/delete
 	protected volatile boolean ar_notify;
 	protected volatile boolean pd_notify;
-	protected LongAdder fastAcq;
-	protected LongAdder slowAcq;
 
 	public final static int SLEEP = 10; //10ms
 
 	public BlockingBinaryRingPool(int capacity) {
 		super(capacity);
-		fastAcq = new LongAdder();
-		slowAcq = new LongAdder();
 		ar_monitor = new Object();
 		ar_notify = false;
 		pd_monitor = new Object();
@@ -29,21 +25,19 @@ public class BlockingBinaryRingPool<T> extends BinaryRingPool<T> {
 	public int acquire(long timeout, TimeUnit type) throws TimeoutException {
 		//fast acquire
 		int acq = super.acquire();
-		if(acq != -1) {
-			fastAcq.increment();
-			return acq;
-		}
+		if(acq != -1)	return acq;
 
 		//slow acquire
 		long start = System.nanoTime(), end;
-		this.ar_notify = true;
 		while(acq == -1) {
+			acq = super.acquire();
+			if(acq != -1)	return acq;
 			synchronized (ar_monitor) {
+				this.ar_notify = true;
 				try {
 					ar_monitor.wait(SLEEP);
 				} catch (InterruptedException e) {}
 			}
-			acq = super.acquire();
 			if(timeout < 0L)	continue;
 			end = System.nanoTime();
 			if(acq == -1 && end - start >= type.toNanos(timeout)) {
@@ -58,7 +52,6 @@ public class BlockingBinaryRingPool<T> extends BinaryRingPool<T> {
 				throw new TimeoutException("BlockingBinaryRingPool acquire timeout " + delay);
 			}
 		}
-		if(acq != -1)	slowAcq.increment();
 		return acq;
 	}
 
@@ -88,14 +81,15 @@ public class BlockingBinaryRingPool<T> extends BinaryRingPool<T> {
 		if(res == true)	return true;
 
 		long start = System.nanoTime(), end;
-		pd_notify = true;
 		while(res == false) {
+			res = super.put(value);
+			if(res == true)	return true;
 			synchronized (pd_monitor) {
+				pd_notify = true;
 				try {
 					pd_monitor.wait(SLEEP);
 				} catch (InterruptedException e) {}
 			}
-			res = super.put(value);
 			if(timeout < 0L)	continue;
 			end = System.nanoTime();
 			if(res == false && end - start >= type.toNanos(timeout)) {
@@ -135,9 +129,6 @@ public class BlockingBinaryRingPool<T> extends BinaryRingPool<T> {
 	}
 
 	public Map<String, Object> getStats() {
-		HashMap<String, Object> stats = (HashMap<String, Object>)super.getStats();
-		stats.put("fast_acq", fastAcq.longValue());
-		stats.put("slow_acq", slowAcq.longValue());
-		return stats;
+		return super.getStats();
 	}
 }
