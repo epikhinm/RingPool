@@ -1,10 +1,8 @@
 package me.schiz.ringpool;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.LongAdder;
 
 public class BlockingBinaryRingPool<T> extends BinaryRingPool<T> {
 	protected Object ar_monitor;	//monitor for acquire/release
@@ -30,14 +28,14 @@ public class BlockingBinaryRingPool<T> extends BinaryRingPool<T> {
 		//slow acquire
 		long start = System.nanoTime(), end;
 		while(acq == -1) {
-			acq = super.acquire();
-			if(acq != -1)	return acq;
 			synchronized (ar_monitor) {
 				this.ar_notify = true;
 				try {
 					ar_monitor.wait(SLEEP);
 				} catch (InterruptedException e) {}
 			}
+			acq = super.acquire();
+			if(acq != -1)	return acq;
 			if(timeout < 0L)	continue;
 			end = System.nanoTime();
 			if(acq == -1 && end - start >= type.toNanos(timeout)) {
@@ -67,7 +65,7 @@ public class BlockingBinaryRingPool<T> extends BinaryRingPool<T> {
 	@Override
 	public boolean release(int ptr) {
 		boolean r = super.release(ptr);
-		if(this.ar_notify == true) {
+		if(this.ar_notify) {
 			synchronized (ar_monitor) {
 				this.ar_monitor.notify();
 			}
@@ -77,22 +75,23 @@ public class BlockingBinaryRingPool<T> extends BinaryRingPool<T> {
 	}
 
 	public boolean put(T value, long timeout, TimeUnit type) throws TimeoutException {
+		//fast put
 		boolean res = super.put(value);
-		if(res == true)	return true;
+		if(res)	return true;
 
 		long start = System.nanoTime(), end;
-		while(res == false) {
-			res = super.put(value);
-			if(res == true)	return true;
+		while(!res) {
 			synchronized (pd_monitor) {
 				pd_notify = true;
 				try {
 					pd_monitor.wait(SLEEP);
 				} catch (InterruptedException e) {}
 			}
+			res = super.put(value);
+			if(res)	return true;
 			if(timeout < 0L)	continue;
 			end = System.nanoTime();
-			if(res == false && end - start >= type.toNanos(timeout)) {
+			if(!res && end - start >= type.toNanos(timeout)) {
 				String delay;
 				if(end - start > 1000000L) {
 					delay = String.valueOf((end - start) / 1000000L);
@@ -119,7 +118,7 @@ public class BlockingBinaryRingPool<T> extends BinaryRingPool<T> {
 	@Override
 	public boolean delete(int ptr, boolean isAcquired) {
 		boolean rc = super.delete(ptr, isAcquired);
-		if(rc && this.pd_notify == true) {
+		if(rc && this.pd_notify) {
 			synchronized (ar_monitor) {
 				this.ar_monitor.notify();
 			}

@@ -14,7 +14,7 @@ public class BinaryRingPool<T> implements RingPool {
 		this.capacity = capacity;
 		indexMask = capacity - 1;
 		objects = new Holder[capacity];
-		localPointer = new ThreadLocal<Integer>();
+		localPointer = new ThreadLocal<>();
 
 		for(int i=0;i<capacity;i++) {
 			objects[i] = new Holder<T>(null);
@@ -24,7 +24,7 @@ public class BinaryRingPool<T> implements RingPool {
 	protected int getLocalPointer() {
 		Integer ptr;
 		if((ptr = localPointer.get()) == null) {
-			ptr = (int)(Thread.currentThread().hashCode() & indexMask);
+			ptr = (Thread.currentThread().hashCode() & indexMask);
 			localPointer.set(ptr);
 		}
 		return ptr;
@@ -70,10 +70,18 @@ public class BinaryRingPool<T> implements RingPool {
 	}
 
 	@Override
+	public boolean delete(int ptr) {
+		if(objects[ptr].state.compareAndSet(Holder.FREE, Holder.BUSY)) {
+			objects[ptr].value = null;
+			objects[ptr].state.lazySet(Holder.FREE);
+			return true;
+		}
+		return false;
+	}
+
 	public boolean delete(int ptr, boolean isAcquired) {
 		if(!isAcquired) {
-			isAcquired = objects[ptr].state.compareAndSet(Holder.FREE, Holder.BUSY);
-			if(!isAcquired)	return false;
+			return delete(ptr);
 		}
 		objects[ptr].value = null;
 		objects[ptr].state.lazySet(Holder.FREE);
@@ -81,7 +89,7 @@ public class BinaryRingPool<T> implements RingPool {
 	}
 
 	public Map<String, Object> getStats() {
-		HashMap<String, Object> stats = new HashMap<String, Object>();
+		HashMap<String, Object> stats = new HashMap<>();
 		int free = 0, null_objects = 0;
 		for(int i = 0;i<capacity;i++) {
 			if(objects[i].state.get() == Holder.FREE)	free++;
