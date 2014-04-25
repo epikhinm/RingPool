@@ -97,6 +97,7 @@ public class StateRingPool<T> {
 	public HashMap<Integer, Integer> getStats() {
 		HashMap<Integer, Integer> map = new HashMap<>();
 		for(int i=0;i<objects.length;i++) {
+			if(objects[i].value == null)	continue;
 			int state = objects[i].state.get();
 			if(!map.containsKey(state))	map.put(state, 0);
 			int prev = map.get(state);
